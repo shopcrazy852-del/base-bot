@@ -1,0 +1,31 @@
+name: Base MEV 24-7 Continuous Engine
+
+on:
+  schedule:
+    # يعيد تشغيل نفسه تلقائياً كل 6 ساعات لضمان العمل 24/7 بدون توقف
+    - cron: '0 */6 * * *'
+  workflow_dispatch: # يتيح لك تشغيله فوراً بنقرة زر في أي وقت
+
+jobs:
+  mev-engine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.10
+        uses: setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          pip install requests eth-account eth-utils
+
+      - name: Run Master Quant Engine
+        env:
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+        run: |
+          python bot.py
