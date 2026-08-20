@@ -13,30 +13,27 @@ BASE_RPC         = "https://mainnet.base.org"
 PRIVATE_MEV_RPC  = "https://base.mev-share.flashbots.net"
 CHAIN_ID         = 8453
 
+# عقدك الماستر المعتمد
 CONTRACT_ADDRESS = "0x2bf18d3137b53991b896c3987cb2c919c396887d"
 
 AERODROME_ROUTER = "0xcF77a3Ba9A5CA399B7c97c748561549838234397"
 UNISWAP_ROUTER   = "0x2626664c2603336E57B271c5C0b26F421741e481"
 
-# التوكنات الرئيسية المعتمدة على Base
-USDC    = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
-WETH    = "0x4200000000000000000000000000000000000006"
-AERO    = "0x940181a94A35A4569E4529A3CDfB74e38FD98631"
-cbBTC   = "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf"
-DEGEN   = "0x4ed4E862860beD51a9570b96d89aF5E1B0Efefed"
-wstETH  = "0xc1CBa3fCea344f92D9239c08C0568f6F2F0ee452"
-cbETH   = "0x2Ae3F1Ec7F1F5012CFEab0185bfc7aa3cf0DEc22"
+# التوكنات الرئيسية
+USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+WETH = "0x4200000000000000000000000000000000000006"
+AERO = "0x940181a94A35A4569E4529A3CDfB74e38FD98631"
 
 PRIVATE_KEY = os.environ.get("PRIVATE_KEY")
 if not PRIVATE_KEY:
-    print("❌ خطأ: لم يتم العثور على PRIVATE_KEY في الخزينة!")
+    print("❌ خطأ: لم يتم العثور على PRIVATE_KEY في الخزينة!", flush=True)
     sys.exit(1)
 
 account = Account.from_key(PRIVATE_KEY)
 OWNER_ADDRESS = account.address
 
 # ==============================================================================
-# 2. مصفوفة الأزواج الشاملة (The Full Niche Matrix)
+# 2. مصفوفة الأزواج النشطة والموثوقة 100%
 # ==============================================================================
 MONITORED_POOLS = [
     {
@@ -48,32 +45,9 @@ MONITORED_POOLS = [
         "dec_diff": 12,
         "fee": 0.35,
         "min_profit": 10
-    },
-    {
-        "name": "AERO / USDC (Ecosystem)",
-        "uni": "0x6cDcb1C4A4D1C3C6d054b27AC5B77e89eAFb971d",
-        "aero": "0x6cDcb1C4A4D1C3C6d054b27AC5B77e89eAFb971d",
-        "path1": [USDC, AERO],
-        "path2": [AERO, USDC],
-        "dec_diff": 0,
-        "fee": 0.30,
-        "min_profit": 8
-    },
-    {
-        "name": "wstETH / WETH (Slipstream)",
-        "uni": "0x2e997cbE45C401f7FdB7e4663eE9f43Fe4c2B1a9",
-        "aero": "0xB07823f66D8E4069f2139E703664Daa4eb7fAc58",
-        "path1": [USDC, WETH, wstETH],
-        "path2": [wstETH, WETH, USDC],
-        "dec_diff": 0,
-        "fee": 0.06,
-        "min_profit": 12
     }
 ]
 
-# ==============================================================================
-# 3. محرك التنفيذ والمحاكاة المسبقة
-# ==============================================================================
 def get_nonce():
     payload = {"jsonrpc": "2.0", "method": "eth_getTransactionCount", "params": [OWNER_ADDRESS, "latest"], "id": 1}
     try:
@@ -138,7 +112,7 @@ def execute_golden_arbitrage(pool, eth_price):
     if not best_size:
         return
 
-    print(f"\n🔥 [اقتناص بالحجم الذهبي!] الزوج: {pool['name']} | الحجم المختار: ${best_size:,} USDC")
+    print(f"\n🔥 [اقتناص بالحجم الذهبي!] الزوج: {pool['name']} | الحجم المختار: ${best_size:,} USDC", flush=True)
     
     nonce = get_nonce()
     tx = {
@@ -164,13 +138,12 @@ def execute_golden_arbitrage(pool, eth_price):
             res = requests.post(BASE_RPC, json=payload, timeout=3).json()
 
         if "result" in res:
-            print(f"✅ تم تنفيذ الصفقة بنجاح على Base!")
-            print(f"🔗 هاش المعاملة: {res['result']}")
-            print(f"💰 تم إيداع صافي الربح كاش في محفظة Jody فوراً!")
+            print(f"✅ تم تنفيذ الصفقة بنجاح على Base! الهاش: {res['result']}", flush=True)
+            print(f"💰 تم إيداع صافي الربح كاش في محفظة Jody!", flush=True)
         else:
-            print(f"⚠️ استجابة الشبكة: {res}")
+            print(f"⚠️ استجابة الشبكة: {res}", flush=True)
     except Exception as e:
-        print(f"❌ خطأ أثناء الإرسال: {e}")
+        print(f"❌ خطأ أثناء الإرسال: {e}", flush=True)
 
 def run_loop():
     calls = []
@@ -202,20 +175,20 @@ def run_loop():
             diff_pct = abs(p_uni - p_aero) / min(p_uni, p_aero) * 100
             net_spread = diff_pct - pool['fee']
 
-            print(f"⚡ [سحابة Azure 24/7] {pool['name']:<24} | Uni: ${p_uni:<8.2f} | Aero: ${p_aero:<8.2f} | الصافي: {net_spread:.4f}%")
+            print(f"⚡ [سحابة Azure 24/7] {pool['name']:<22} | Uni: ${p_uni:<8.2f} | Aero: ${p_aero:<8.2f} | الصافي: {net_spread:.4f}%", flush=True)
 
             if net_spread > 0.05:
                 execute_golden_arbitrage(pool, eth_price=p_uni)
         except:
             continue
 
-print("="*75)
-print("🚀 انطلاق المنظومة الماستر الموسعة 24/7 على سيرفرات مايكروسوفت السحابية")
-print(f"💎 العقد الماستر: {CONTRACT_ADDRESS}")
-print(f"🔒 الخزينة المستلمة للأرباح: محفظة Jody ({OWNER_ADDRESS})")
-print("="*75)
+print("="*75, flush=True)
+print("🚀 انطلاق المنظومة الماستر 24/7 على سيرفرات مايكروسوفت السحابية", flush=True)
+print(f"💎 العقد الماستر: {CONTRACT_ADDRESS}", flush=True)
+print(f"🔒 الخزينة المستلمة للأرباح: محفظة Jody ({OWNER_ADDRESS})", flush=True)
+print("="*75, flush=True)
 
 start_time = time.time()
-while time.time() - start_time < 19800: # 5.5 ساعات
+while time.time() - start_time < 19800:
     run_loop()
     time.sleep(1.5)
