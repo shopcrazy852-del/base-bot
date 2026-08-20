@@ -7,36 +7,36 @@ from eth_utils import keccak
 from eth_abi import encode
 
 # ==============================================================================
-# 1. إعدادات الشبكة والعقد الماستر الجديد
+# 1. إعدادات الشبكة والعقد الماستر
 # ==============================================================================
 BASE_RPC         = "https://mainnet.base.org"
 PRIVATE_MEV_RPC  = "https://base.mev-share.flashbots.net"
 CHAIN_ID         = 8453
 
-# عنوان عقدك الماستر الجديد المنشور للتو
 CONTRACT_ADDRESS = "0x2bf18d3137b53991b896c3987cb2c919c396887d"
 
-# عناوين بروتوكولات التداول الرسمية على Base
 AERODROME_ROUTER = "0xcF77a3Ba9A5CA399B7c97c748561549838234397"
 UNISWAP_ROUTER   = "0x2626664c2603336E57B271c5C0b26F421741e481"
 
-# التوكنات الرئيسية
-USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
-WETH = "0x4200000000000000000000000000000000000006"
-AERO = "0x940181a94A35A4569E4529A3CDfB74e38FD98631"
+# التوكنات الرئيسية المعتمدة على Base
+USDC    = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+WETH    = "0x4200000000000000000000000000000000000006"
+AERO    = "0x940181a94A35A4569E4529A3CDfB74e38FD98631"
+cbBTC   = "0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf"
+DEGEN   = "0x4ed4E862860beD51a9570b96d89aF5E1B0Efefed"
+wstETH  = "0xc1CBa3fCea344f92D9239c08C0568f6F2F0ee452"
+cbETH   = "0x2Ae3F1Ec7F1F5012CFEab0185bfc7aa3cf0DEc22"
 
-# سحب المفتاح الخاص المشفر تلقائياً من GitHub Secrets
 PRIVATE_KEY = os.environ.get("PRIVATE_KEY")
-
 if not PRIVATE_KEY:
-    print("❌ خطأ: لم يتم العثور على PRIVATE_KEY في الخزينة السرية!")
+    print("❌ خطأ: لم يتم العثور على PRIVATE_KEY في الخزينة!")
     sys.exit(1)
 
 account = Account.from_key(PRIVATE_KEY)
 OWNER_ADDRESS = account.address
 
 # ==============================================================================
-# 2. مصفوفة المسابح النشطة (The Matrix)
+# 2. مصفوفة الأزواج الشاملة (The Full Niche Matrix)
 # ==============================================================================
 MONITORED_POOLS = [
     {
@@ -58,6 +58,16 @@ MONITORED_POOLS = [
         "dec_diff": 0,
         "fee": 0.30,
         "min_profit": 8
+    },
+    {
+        "name": "wstETH / WETH (Slipstream)",
+        "uni": "0x2e997cbE45C401f7FdB7e4663eE9f43Fe4c2B1a9",
+        "aero": "0xB07823f66D8E4069f2139E703664Daa4eb7fAc58",
+        "path1": [USDC, WETH, wstETH],
+        "path2": [wstETH, WETH, USDC],
+        "dec_diff": 0,
+        "fee": 0.06,
+        "min_profit": 12
     }
 ]
 
@@ -100,8 +110,8 @@ def execute_golden_arbitrage(pool, eth_price):
     for size in flash_tiers:
         flash_amount = int(size * 10**6)
         min_profit   = int(pool['min_profit'] * 10**6)
-        min_out1     = 0 # يُحسب ديناميكياً
-        builder_tip  = 500 # 5% رشوة للمعدن لضمان الأسبقية
+        min_out1     = 0
+        builder_tip  = 500 # 5% للمعدن
 
         params = (
             AERODROME_ROUTER,
@@ -134,7 +144,7 @@ def execute_golden_arbitrage(pool, eth_price):
     tx = {
         'to': CONTRACT_ADDRESS,
         'value': 0,
-        'gas': 600000,
+        'gas': 650000,
         'maxFeePerGas': int(0.1 * 10**9),
         'maxPriorityFeePerGas': int(0.001 * 10**9),
         'nonce': nonce,
@@ -155,7 +165,7 @@ def execute_golden_arbitrage(pool, eth_price):
 
         if "result" in res:
             print(f"✅ تم تنفيذ الصفقة بنجاح على Base!")
-            print(f"🔗 الهاش: {res['result']}")
+            print(f"🔗 هاش المعاملة: {res['result']}")
             print(f"💰 تم إيداع صافي الربح كاش في محفظة Jody فوراً!")
         else:
             print(f"⚠️ استجابة الشبكة: {res}")
@@ -192,7 +202,7 @@ def run_loop():
             diff_pct = abs(p_uni - p_aero) / min(p_uni, p_aero) * 100
             net_spread = diff_pct - pool['fee']
 
-            print(f"⚡ [سحابة Azure 24/7] {pool['name']:<22} | Uni: ${p_uni:<8.2f} | Aero: ${p_aero:<8.2f} | الصافي: {net_spread:.4f}%")
+            print(f"⚡ [سحابة Azure 24/7] {pool['name']:<24} | Uni: ${p_uni:<8.2f} | Aero: ${p_aero:<8.2f} | الصافي: {net_spread:.4f}%")
 
             if net_spread > 0.05:
                 execute_golden_arbitrage(pool, eth_price=p_uni)
@@ -200,13 +210,12 @@ def run_loop():
             continue
 
 print("="*75)
-print("🚀 انطلاق المنظومة الماستر 24/7 على سيرفرات مايكروسوفت السحابية")
+print("🚀 انطلاق المنظومة الماستر الموسعة 24/7 على سيرفرات مايكروسوفت السحابية")
 print(f"💎 العقد الماستر: {CONTRACT_ADDRESS}")
 print(f"🔒 الخزينة المستلمة للأرباح: محفظة Jody ({OWNER_ADDRESS})")
 print("="*75)
 
-# تشغيل دورة الفحص السحابية المتواصلة
 start_time = time.time()
-while time.time() - start_time < 19800: # 5.5 ساعات لكل دورة
+while time.time() - start_time < 19800: # 5.5 ساعات
     run_loop()
     time.sleep(1.5)
