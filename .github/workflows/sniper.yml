@@ -17,5 +17,5 @@ jobs:
         env:
           PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
         run: |
-          pip install requests eth-account eth-utils
-          python bot.py
+          pip install requests eth-account eth-utils eth-abi
+          python -u bot.py
