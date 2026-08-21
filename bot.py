@@ -13,15 +13,18 @@ BASE_RPC         = "https://mainnet.base.org"
 PRIVATE_MEV_RPC  = "https://base.mev-share.flashbots.net"
 CHAIN_ID         = 8453
 
+# عقدك الماستر المنشور على شبكة Base
 CONTRACT_ADDRESS = "0x2bf18d3137b53991b896c3987cb2c919c396887d"
 
 AERODROME_ROUTER = "0xcF77a3Ba9A5CA399B7c97c748561549838234397"
 UNISWAP_ROUTER   = "0x2626664c2603336E57B271c5C0b26F421741e481"
 
-# التوكنات المعتمدة
-USDC  = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
-WETH  = "0x4200000000000000000000000000000000000006"
-cbETH = "0x2Ae3F1Ec7F1F5012CFEab0185bfc7aa3cf0DEc22"
+# التوكنات المعتمدة على Base
+USDC   = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+WETH   = "0x4200000000000000000000000000000000000006"
+cbETH  = "0x2Ae3F1Ec7F1F5012CFEab0185bfc7aa3cf0DEc22"
+wstETH = "0xc1CBa3fCea344f92D9239c08C0568f6F2F0ee452"
+AERO   = "0x940181a94A35A4569E4529A3CDfB74e38FD98631"
 
 PRIVATE_KEY = os.environ.get("PRIVATE_KEY")
 if not PRIVATE_KEY:
@@ -32,27 +35,37 @@ account = Account.from_key(PRIVATE_KEY)
 OWNER_ADDRESS = account.address
 
 # ==============================================================================
-# 2. مصفوفة مسابح الـ Slipstream المركزة منخفضة العمولات (0.10% Fee Barrier)
+# 2. مصفوفة المسابح والتحكيم الثلاثي (The Master Strategy Matrix)
 # ==============================================================================
 MONITORED_POOLS = [
     {
-        "name": "WETH / USDC (Slipstream Low-Fee)",
-        "uni": "0xd0b53D9277642d899DF5C87A3966A349A798F224", # Uni v3 0.05%
-        "aero": "0xb2cc224c1c9fee385f8ad6a55b4d94e92359dc59", # Aero Slipstream 0.05%
+        "name": "WETH / USDC (Slipstream 0.10%)",
+        "uni": "0xd0b53D9277642d899DF5C87A3966A349A798F224",
+        "aero": "0xb2cc224c1c9fee385f8ad6a55b4d94e92359dc59",
         "path1": [USDC, WETH],
         "path2": [WETH, USDC],
         "dec_diff": 12,
-        "fee": 0.10, # 0.05% + 0.05% = 0.10% فقط!
+        "fee": 0.10, # عمولة منخفضة جداً (0.05% + 0.05%)
         "min_profit": 10
     },
     {
         "name": "cbETH / WETH (Slipstream LST)",
-        "uni": "0x10648ba41b8565907cfa1496765fa4d95390aa0d", # Uni v3 0.05%
-        "aero": "0x47ca96ea59c13f72745928887f84c9f52c3d7348", # Aero Slipstream 0.05%
+        "uni": "0x10648ba41b8565907cfa1496765fa4d95390aa0d",
+        "aero": "0x47ca96ea59c13f72745928887f84c9f52c3d7348",
         "path1": [USDC, WETH, cbETH],
         "path2": [cbETH, WETH, USDC],
         "dec_diff": 0,
-        "fee": 0.10, # عمولة منخفضة جداً
+        "fee": 0.10,
+        "min_profit": 12
+    },
+    {
+        "name": "wstETH / WETH (Concentrated)",
+        "uni": "0x2e997cbE45C401f7FdB7e4663eE9f43Fe4c2B1a9",
+        "aero": "0xB07823f66D8E4069f2139E703664Daa4eb7fAc58",
+        "path1": [USDC, WETH, wstETH],
+        "path2": [wstETH, WETH, USDC],
+        "dec_diff": 0,
+        "fee": 0.06, # 0.06% فقط!
         "min_profit": 12
     }
 ]
@@ -93,6 +106,7 @@ def simulate_preflight(data_bytes):
         return False
 
 def execute_golden_arbitrage(pool):
+    # تجربة الشرائح الثلاث للحجم الذهبي
     flash_tiers = [10000, 25000, 50000]
     selector = keccak(b"executeArbitrage((address,address,address[],address[],uint256,uint256,uint256,uint256))")[:4]
 
@@ -130,7 +144,7 @@ def execute_golden_arbitrage(pool):
     if not best_size:
         return
 
-    print(f"\n🔥 [اقتناص بالعمولة المخفضة 0.10%!] الزوج: {pool['name']} | الحجم: ${best_size:,} USDC", flush=True)
+    print(f"\n🔥 [اقتناص بالحجم الذهبي!] الزوج: {pool['name']} | الحجم: ${best_size:,} USDC", flush=True)
     
     nonce = get_nonce()
     tx = {
@@ -189,18 +203,18 @@ def run_loop():
             net_spread = diff_pct - pool['fee']
 
             status = f"🟢 +{net_spread:.4f}% [فرصة!]" if net_spread > 0.03 else f"⚪ {net_spread:.4f}%"
-            print(f"⚡ [سحابة 24/7 - حاجز 0.10%] {pool['name']:<30} | Uni: ${p_uni:<9.2f} | Aero: ${p_aero:<9.2f} | الصافي: {status}", flush=True)
+            print(f"⚡ [سحابة 24/7 - حاجز {pool['fee']:.2f}%] {pool['name']:<30} | Uni: ${p_uni:<9.2f} | Aero: ${p_aero:<9.2f} | الصافي: {status}", flush=True)
 
             if net_spread > 0.03:
                 execute_golden_arbitrage(pool)
 
 print("="*85, flush=True)
-print("🚀 انطلاق رادار الـ Slipstream المخفض (0.10% Barrier) على سحابة مايكروسوفت 24/7", flush=True)
-print(f"💎 العقد الماستر: {CONTRACT_ADDRESS}", flush=True)
-print(f"🔒 الخزينة المستلمة للأرباح: محفظة Jody ({OWNER_ADDRESS})", flush=True)
+print("🚀 انطلاق المنظومة الماستر المحدثة بالكامل (Architecture v3) على سحابة مايكروسوفت 24/7", flush=True)
+print(f"💎 العقد الماستر: {CONTRACT_ADDRESS}")
+print(f"🔒 الخزينة الحصرية المستلمة للأرباح: محفظة Jody ({OWNER_ADDRESS})")
 print("="*85, flush=True)
 
 start_time = time.time()
-while time.time() - start_time < 19800:
+while time.time() - start_time < 19800: # 5.5 ساعات لكل جلسة
     run_loop()
     time.sleep(2.0)
