@@ -1,7 +1,6 @@
 import os
 import sys
 import time
-import threading
 import requests
 from eth_account import Account
 from eth_utils import keccak
@@ -14,6 +13,7 @@ BASE_RPC         = "https://mainnet.base.org"
 PRIVATE_MEV_RPC  = "https://base.mev-share.flashbots.net"
 CHAIN_ID         = 8453
 
+# عقدك الماستر المنشور على Base
 CONTRACT_ADDRESS = "0x2bf18d3137b53991b896c3987cb2c919c396887d"
 
 AERODROME_ROUTER = "0xcF77a3Ba9A5CA399B7c97c748561549838234397"
@@ -23,7 +23,6 @@ UNISWAP_ROUTER   = "0x2626664c2603336E57B271c5C0b26F421741e481"
 USDC   = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
 WETH   = "0x4200000000000000000000000000000000000006"
 cbETH  = "0x2Ae3F1Ec7F1F5012CFEab0185bfc7aa3cf0DEc22"
-wstETH = "0xc1CBa3fCea344f92D9239c08C0568f6F2F0ee452"
 AERO   = "0x940181a94A35A4569E4529A3CDfB74e38FD98631"
 DEGEN  = "0x4ed4E862860beD51a9570b96d89aF5E1B0Efefed"
 
@@ -34,87 +33,98 @@ if not PRIVATE_KEY:
 
 account = Account.from_key(PRIVATE_KEY)
 OWNER_ADDRESS = account.address
+session = requests.Session()
 
 # ==============================================================================
-# 2. الخيط الأول: رادار بينانس التنبؤي (CEX Lead Signal)
-# ==============================================================================
-binance_price = {"eth": 0.0}
-
-def fetch_binance_stream():
-    while True:
-        try:
-            res = requests.get("https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT", timeout=2).json()
-            binance_price["eth"] = float(res['price'])
-        except:
-            pass
-        time.sleep(1.0)
-
-threading.Thread(target=fetch_binance_stream, daemon=True).start()
-
-# ==============================================================================
-# 3. الخيط الثاني: صائد تصفيات الإقراض في الخلفية (Morpho Vault Watcher)
-# ==============================================================================
-def background_liquidation_watcher():
-    """يراقب ديون الحيتان في منصات الإقراض كل 30 ثانية في مسار مستقل"""
-    while True:
-        try:
-            # فحص أسعار الأوراكل للضمانات المرهونة
-            pass
-        except:
-            pass
-        time.sleep(30)
-
-threading.Thread(target=background_liquidation_watcher, daemon=True).start()
-
-# ==============================================================================
-# 4. مصفوفة المسابح والتحكيم الثلاثي الشاملة (The Complete Master Matrix)
+# 2. مصفوفة المسابح الشاملة لجميع الفئات (The Complete Weekend Alpha Matrix)
 # ==============================================================================
 MONITORED_POOLS = [
     {
-        "name": "WETH / USDC (Slipstream 0.10%)",
+        "name": "WETH / USDC (Slipstream)",
         "uni": "0xd0b53D9277642d899DF5C87A3966A349A798F224",
+        "uni_type": "slot0",
         "aero": "0xb2cc224c1c9fee385f8ad6a55b4d94e92359dc59",
+        "aero_type": "slot0",
         "path1": [USDC, WETH],
         "path2": [WETH, USDC],
         "dec_diff": 12,
-        "fee": 0.10,
-        "min_profit": 10
+        "fee": 0.10, # 0.10% فقط!
+        "min_profit": 10,
+        "max_size": 50000
     },
     {
-        "name": "cbETH / WETH (Slipstream LST)",
+        "name": "cbETH / WETH (LST)",
         "uni": "0x10648ba41b8565907cfa1496765fa4d95390aa0d",
+        "uni_type": "slot0",
         "aero": "0x47ca96ea59c13f72745928887f84c9f52c3d7348",
+        "aero_type": "slot0",
         "path1": [USDC, WETH, cbETH],
         "path2": [cbETH, WETH, USDC],
         "dec_diff": 0,
         "fee": 0.10,
-        "min_profit": 12
+        "min_profit": 12,
+        "max_size": 50000
+    },
+    {
+        "name": "AERO / USDC (Ecosystem)",
+        "uni": "0x6cDcb1C4A4D1C3C6d054b27AC5B77e89eAFb971d",
+        "uni_type": "reserves",
+        "aero": "0x6cDcb1C4A4D1C3C6d054b27AC5B77e89eAFb971d",
+        "aero_type": "reserves",
+        "path1": [USDC, AERO],
+        "path2": [AERO, USDC],
+        "dec_diff": 12,
+        "fee": 0.30,
+        "min_profit": 8,
+        "max_size": 25000
+    },
+    {
+        "name": "DEGEN / WETH (Meme Volatile)",
+        "uni": "0xc9034c3E7F1875151523c9E8926d9122393d25B1",
+        "uni_type": "reserves",
+        "aero": "0xc9034c3E7F1875151523c9E8926d9122393d25B1",
+        "aero_type": "reserves",
+        "path1": [USDC, WETH, DEGEN],
+        "path2": [DEGEN, WETH, USDC],
+        "dec_diff": 0,
+        "fee": 0.35,
+        "min_profit": 8,
+        "max_size": 15000
     },
     {
         "name": "TRIANGLE: USDC -> WETH -> AERO -> USDC",
         "uni": "0xd0b53D9277642d899DF5C87A3966A349A798F224",
+        "uni_type": "slot0",
         "aero": "0xb2cc224c1c9fee385f8ad6a55b4d94e92359dc59",
+        "aero_type": "slot0",
         "path1": [USDC, WETH],
         "path2": [WETH, AERO, USDC],
         "dec_diff": 12,
         "fee": 0.35,
-        "min_profit": 15
+        "min_profit": 15,
+        "max_size": 25000
     }
 ]
 
-def decode_slot0(hex_data, dec_diff):
+def decode_price(hex_data, pool_type, dec_diff):
     if not hex_data or hex_data == "0x":
         return None
     try:
-        sqrt_p = int(hex_data[2:66], 16)
-        return ((sqrt_p / (2**96)) ** 2) * (10**dec_diff)
+        if pool_type == "slot0":
+            sqrt_p = int(hex_data[2:66], 16)
+            return ((sqrt_p / (2**96)) ** 2) * (10**dec_diff)
+        elif pool_type == "reserves":
+            r0 = int(hex_data[2:66], 16)
+            r1 = int(hex_data[66:130], 16)
+            if r0 == 0: return None
+            return (r1 / r0) * (10**dec_diff)
     except:
         return None
 
 def get_nonce():
     payload = {"jsonrpc": "2.0", "method": "eth_getTransactionCount", "params": [OWNER_ADDRESS, "latest"], "id": 1}
     try:
-        res = requests.post(BASE_RPC, json=payload, timeout=3).json()
+        res = session.post(BASE_RPC, json=payload, timeout=3).json()
         return int(res['result'], 16)
     except:
         return 0
@@ -132,13 +142,16 @@ def simulate_preflight(data_bytes):
         "id": 1
     }
     try:
-        res = requests.post(BASE_RPC, json=payload, timeout=3).json()
+        res = session.post(BASE_RPC, json=payload, timeout=3).json()
         return ("result" in res and res["result"] != "0x")
     except:
         return False
 
 def execute_golden_arbitrage(pool):
-    flash_tiers = [10000, 25000, 50000]
+    # تجربة أحجام القروض الومضية المناسبة لعمق كل مسبح
+    tier_max = pool.get('max_size', 50000)
+    flash_tiers = [10000, 25000] if tier_max <= 25000 else [10000, 25000, 50000]
+    
     selector = keccak(b"executeArbitrage((address,address,address[],address[],uint256,uint256,uint256,uint256))")[:4]
 
     best_size = None
@@ -175,7 +188,7 @@ def execute_golden_arbitrage(pool):
     if not best_size:
         return
 
-    print(f"\n🔥 [اقتناص بالحجم الذهبي!] الزوج: {pool['name']} | الحجم: ${best_size:,} USDC", flush=True)
+    print(f"\n🔥 [اقتناص فرصة رابحة!] النمط: {pool['name']} | حجم القرض: ${best_size:,} USDC", flush=True)
     
     nonce = get_nonce()
     tx = {
@@ -195,14 +208,14 @@ def execute_golden_arbitrage(pool):
         payload = {"jsonrpc": "2.0", "method": "eth_sendRawTransaction", "params": ["0x" + raw_hex if not raw_hex.startswith("0x") else raw_hex], "id": 1}
         
         try:
-            res = requests.post(PRIVATE_MEV_RPC, json=payload, timeout=3).json()
-            if "error" in res: res = requests.post(BASE_RPC, json=payload, timeout=3).json()
+            res = session.post(PRIVATE_MEV_RPC, json=payload, timeout=3).json()
+            if "error" in res: res = session.post(BASE_RPC, json=payload, timeout=3).json()
         except:
-            res = requests.post(BASE_RPC, json=payload, timeout=3).json()
+            res = session.post(BASE_RPC, json=payload, timeout=3).json()
 
         if "result" in res:
             print(f"✅ تم تنفيذ الصفقة بنجاح على Base! الهاش: {res['result']}", flush=True)
-            print(f"💰 تم إيداع صافي الربح كاش في محفظة Jody!", flush=True)
+            print(f"💰 تم إيداع صافي الأرباح كاش في محفظة Jody!", flush=True)
         else:
             print(f"⚠️ استجابة الشبكة: {res}", flush=True)
     except Exception as e:
@@ -211,50 +224,41 @@ def execute_golden_arbitrage(pool):
 def run_loop():
     calls = []
     for pool in MONITORED_POOLS:
-        calls.append({"to": pool['uni'], "data": "0x3850c7bd"})
-        calls.append({"to": pool['aero'], "data": "0x3850c7bd"})
+        calls.append({"to": pool['uni'], "data": "0x3850c7bd" if pool['uni_type'] == "slot0" else "0x0902f1ac"})
+        calls.append({"to": pool['aero'], "data": "0x3850c7bd" if pool['aero_type'] == "slot0" else "0x0902f1ac"})
 
     payload = [{"jsonrpc": "2.0", "method": "eth_call", "params": [{"to": c['to'], "data": c['data']}, "latest"], "id": i} for i, c in enumerate(calls)]
 
     try:
-        res = requests.post(BASE_RPC, json=payload, timeout=3).json()
+        res = session.post(BASE_RPC, json=payload, timeout=3).json()
         results = {item['id']: item.get('result', None) for item in res}
     except:
         return
-
-    b_price = binance_price.get("eth", 0.0)
 
     for i, pool in enumerate(MONITORED_POOLS):
         res_uni = results.get(2 * i)
         res_aero = results.get(2 * i + 1)
 
-        p_uni = decode_slot0(res_uni, pool['dec_diff'])
-        p_aero = decode_slot0(res_aero, pool['dec_diff'])
+        p_uni = decode_price(res_uni, pool['uni_type'], pool['dec_diff'])
+        p_aero = decode_price(res_aero, pool['aero_type'], pool['dec_diff'])
 
         if p_uni and p_aero:
             diff_pct = abs(p_uni - p_aero) / min(p_uni, p_aero) * 100
-
-            # تسريع إشارة القنص في حال حدوث صعود مسبق في بينانس
-            if b_price > 0 and pool['name'].startswith("WETH"):
-                cex_diff = abs(b_price - p_uni) / p_uni * 100
-                if cex_diff > 0.25:
-                    diff_pct += cex_diff
-
             net_spread = diff_pct - pool['fee']
 
             status = f"🟢 +{net_spread:.4f}% [فرصة!]" if net_spread > 0.03 else f"⚪ {net_spread:.4f}%"
-            print(f"⚡ [سحابة 24/7] {pool['name']:<35} | Uni: ${p_uni:<8.2f} | Aero: ${p_aero:<8.2f} | الصافي: {status}", flush=True)
+            print(f"⚡ [سحابة 24/7] {pool['name']:<36} | Uni: ${p_uni:<8.2f} | Aero: ${p_aero:<8.2f} | الصافي: {status}", flush=True)
 
             if net_spread > 0.03:
                 execute_golden_arbitrage(pool)
 
 print("="*85, flush=True)
-print("🚀 انطلاق المنظومة الشاملة المدمجة (v5 Ultimate Multi-Vector Engine)", flush=True)
+print("🚀 انطلاق المنظومة الشاملة المدمجة (Weekend Alpha Engine: Memes + LSTs + 3-Hop)", flush=True)
 print(f"💎 العقد الماستر: {CONTRACT_ADDRESS}")
 print(f"🔒 الخزينة الحصرية المستلمة للأرباح: محفظة Jody ({OWNER_ADDRESS})")
 print("="*85, flush=True)
 
 start_time = time.time()
-while time.time() - start_time < 19800:
+while time.time() - start_time < 19800: # 5.5 ساعات لكل جلسة
     run_loop()
     time.sleep(2.0)
