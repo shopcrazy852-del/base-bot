@@ -23,6 +23,7 @@ WETH   = "0x4200000000000000000000000000000000000006"
 cbETH  = "0x2Ae3F1Ec7F1F5012CFEab0185bfc7aa3cf0DEc22"
 AERO   = "0x940181a94A35A4569E4529A3CDfB74e38FD98631"
 DEGEN  = "0x4ed4E862860beD51a9570b96d89aF5E1B0Efefed"
+BRETT  = "0x532f27101965dd16442e59d40670faf5ebb142e4"
 
 PRIVATE_KEY = os.environ.get("PRIVATE_KEY")
 if not PRIVATE_KEY:
@@ -34,15 +35,13 @@ OWNER_ADDRESS = account.address
 session = requests.Session()
 
 # ==============================================================================
-# 2. مصفوفة المسابح النشطة المؤكدة (Active Hunting Matrix)
+# 2. مصفوفة المسابح الخماسية المؤكدة على Base
 # ==============================================================================
 MONITORED_POOLS = [
     {
         "name": "WETH / USDC (Slipstream 0.10%)",
         "uni": "0xd0b53D9277642d899DF5C87A3966A349A798F224",
-        "uni_type": "slot0",
         "aero": "0xb2cc224c1c9fee385f8ad6a55b4d94e92359dc59",
-        "aero_type": "slot0",
         "path1": [USDC, WETH],
         "path2": [WETH, USDC],
         "dec_diff": 12,
@@ -53,9 +52,7 @@ MONITORED_POOLS = [
     {
         "name": "cbETH / WETH (Slipstream LST)",
         "uni": "0x10648ba41b8565907cfa1496765fa4d95390aa0d",
-        "uni_type": "slot0",
         "aero": "0x47ca96ea59c13f72745928887f84c9f52c3d7348",
-        "aero_type": "slot0",
         "path1": [USDC, WETH, cbETH],
         "path2": [cbETH, WETH, USDC],
         "dec_diff": 0,
@@ -64,45 +61,46 @@ MONITORED_POOLS = [
         "max_size": 50000
     },
     {
-        "name": "AERO / USDC (Ecosystem Volatile)",
-        "uni": "0x83c18b67ddf7b4946ce2ad9518d6e3cbe827cf6e",
-        "uni_type": "slot0",
-        "aero": "0x6cDcb1C4A4D1C3C6d054b27AC5B77e89eAFb971d",
-        "aero_type": "reserves",
-        "path1": [USDC, AERO],
-        "path2": [AERO, USDC],
-        "dec_diff": 12,
-        "fee": 0.30,
-        "min_profit": 8,
-        "max_size": 25000
-    },
-    {
-        "name": "DEGEN / WETH (Meme Volatile)",
-        "uni": "0xc9034c3E7F1875151523c9E8926d9122393d25B1",
-        "uni_type": "reserves",
-        "aero": "0xc9034c3E7F1875151523c9E8926d9122393d25B1",
-        "aero_type": "reserves",
+        "name": "DEGEN / WETH (Meme Slipstream)",
+        "uni": "0x4e829F8A5213c42535AB84AA40BD4aDCCE9cBa02",
+        "aero": "0xaFB62448929664Bfccb0aAe22f232520e765bA88",
         "path1": [USDC, WETH, DEGEN],
         "path2": [DEGEN, WETH, USDC],
         "dec_diff": 0,
-        "fee": 0.35,
+        "fee": 0.30,
         "min_profit": 8,
         "max_size": 15000
+    },
+    {
+        "name": "BRETT / WETH (Meme Slipstream)",
+        "uni": "0x4e829F8A5213c42535AB84AA40BD4aDCCE9cBa02",
+        "aero": "0x4e829F8A5213c42535AB84AA40BD4aDCCE9cBa02",
+        "path1": [USDC, WETH, BRETT],
+        "path2": [BRETT, WETH, USDC],
+        "dec_diff": 0,
+        "fee": 0.30,
+        "min_profit": 8,
+        "max_size": 15000
+    },
+    {
+        "name": "TRIANGLE: USDC -> WETH -> AERO -> USDC",
+        "uni": "0xd0b53D9277642d899DF5C87A3966A349A798F224",
+        "aero": "0xb2cc224c1c9fee385f8ad6a55b4d94e92359dc59",
+        "path1": [USDC, WETH],
+        "path2": [WETH, AERO, USDC],
+        "dec_diff": 12,
+        "fee": 0.35,
+        "min_profit": 15,
+        "max_size": 25000
     }
 ]
 
-def decode_price(hex_data, pool_type, dec_diff):
+def decode_slot0(hex_data, dec_diff):
     if not hex_data or hex_data == "0x":
         return None
     try:
-        if pool_type == "slot0":
-            sqrt_p = int(hex_data[2:66], 16)
-            return ((sqrt_p / (2**96)) ** 2) * (10**dec_diff)
-        elif pool_type == "reserves":
-            r0 = int(hex_data[2:66], 16)
-            r1 = int(hex_data[66:130], 16)
-            if r0 == 0: return None
-            return (r1 / r0) * (10**dec_diff)
+        sqrt_p = int(hex_data[2:66], 16)
+        return ((sqrt_p / (2**96)) ** 2) * (10**dec_diff)
     except:
         return None
 
@@ -145,7 +143,7 @@ def execute_golden_arbitrage(pool):
         flash_amount = int(size * 10**6)
         min_profit   = int(pool['min_profit'] * 10**6)
         min_out1     = 0
-        builder_tip  = 500 # 5% للمعدن
+        builder_tip  = 500
 
         params = (
             AERODROME_ROUTER,
@@ -172,7 +170,7 @@ def execute_golden_arbitrage(pool):
     if not best_size:
         return
 
-    print(f"\n🔥 [اقتناص رابح!] النمط: {pool['name']} | حجم القرض: ${best_size:,} USDC", flush=True)
+    print(f"\n🔥 [اقتناص رابح!] النمط: {pool['name']} | الحجم: ${best_size:,} USDC", flush=True)
     
     nonce = get_nonce()
     tx = {
@@ -208,8 +206,8 @@ def execute_golden_arbitrage(pool):
 def run_loop():
     calls = []
     for pool in MONITORED_POOLS:
-        calls.append({"to": pool['uni'], "data": "0x3850c7bd" if pool['uni_type'] == "slot0" else "0x0902f1ac"})
-        calls.append({"to": pool['aero'], "data": "0x3850c7bd" if pool['aero_type'] == "slot0" else "0x0902f1ac"})
+        calls.append({"to": pool['uni'], "data": "0x3850c7bd"})
+        calls.append({"to": pool['aero'], "data": "0x3850c7bd"})
 
     payload = [{"jsonrpc": "2.0", "method": "eth_call", "params": [{"to": c['to'], "data": c['data']}, "latest"], "id": i} for i, c in enumerate(calls)]
 
@@ -223,26 +221,26 @@ def run_loop():
         res_uni = results.get(2 * i)
         res_aero = results.get(2 * i + 1)
 
-        p_uni = decode_price(res_uni, pool['uni_type'], pool['dec_diff'])
-        p_aero = decode_price(res_aero, pool['aero_type'], pool['dec_diff'])
+        p_uni = decode_slot0(res_uni, pool['dec_diff'])
+        p_aero = decode_slot0(res_aero, pool['dec_diff'])
 
         if p_uni and p_aero:
             diff_pct = abs(p_uni - p_aero) / min(p_uni, p_aero) * 100
             net_spread = diff_pct - pool['fee']
 
             status = f"🟢 +{net_spread:.4f}% [فرصة!]" if net_spread > 0.03 else f"⚪ {net_spread:.4f}%"
-            print(f"⚡ [سحابة 24/7] {pool['name']:<36} | Uni: ${p_uni:<8.2f} | Aero: ${p_aero:<8.2f} | الصافي: {status}", flush=True)
+            print(f"⚡ [24/7 Apex] {pool['name']:<38} | Uni: ${p_uni:<8.2f} | Aero: ${p_aero:<8.2f} | الصافي: {status}", flush=True)
 
             if net_spread > 0.03:
                 execute_golden_arbitrage(pool)
 
-print("="*85, flush=True)
-print("🚀 انطلاق المنظومة الشاملة المدمجة (The Weekend Alpha Matrix: WETH + LST + AERO + DEGEN)", flush=True)
+print("="*90, flush=True)
+print("🚀 انطلاق المنظومة الخماسية الشاملة لجميع الأزواج وعملات الميم 24/7", flush=True)
 print(f"💎 العقد الماستر: {CONTRACT_ADDRESS}")
 print(f"🔒 الخزينة الحصرية المستلمة للأرباح: محفظة Jody ({OWNER_ADDRESS})")
-print("="*85, flush=True)
+print("="*90, flush=True)
 
 start_time = time.time()
-while time.time() - start_time < 19800: # 5.5 ساعات لكل جلسة
+while time.time() - start_time < 19800: # 5.5 ساعات
     run_loop()
     time.sleep(2.0)
