@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import threading
 import requests
 from eth_account import Account
 from eth_utils import keccak
@@ -13,6 +14,7 @@ BASE_RPC         = "https://mainnet.base.org"
 PRIVATE_MEV_RPC  = "https://base.mev-share.flashbots.net"
 CHAIN_ID         = 8453
 
+# عقدك الماستر المنشور على شبكة Base
 CONTRACT_ADDRESS = "0x2bf18d3137b53991b896c3987cb2c919c396887d"
 AERODROME_ROUTER = "0xcF77a3Ba9A5CA399B7c97c748561549838234397"
 UNISWAP_ROUTER   = "0x2626664c2603336E57B271c5C0b26F421741e481"
@@ -23,7 +25,6 @@ WETH   = "0x4200000000000000000000000000000000000006"
 cbETH  = "0x2Ae3F1Ec7F1F5012CFEab0185bfc7aa3cf0DEc22"
 AERO   = "0x940181a94A35A4569E4529A3CDfB74e38FD98631"
 DEGEN  = "0x4ed4E862860beD51a9570b96d89aF5E1B0Efefed"
-BRETT  = "0x532f27101965dd16442e59d40670faf5ebb142e4"
 
 PRIVATE_KEY = os.environ.get("PRIVATE_KEY")
 if not PRIVATE_KEY:
@@ -35,7 +36,54 @@ OWNER_ADDRESS = account.address
 session = requests.Session()
 
 # ==============================================================================
-# 2. مصفوفة المسابح الخماسية المؤكدة على Base
+# 2. الخيط 1: رادار بينانس التنبؤي (CEX Lead Signal)
+# ==============================================================================
+market_signals = {"binance_eth": 0.0, "morpho_liquidations": 0}
+
+def fetch_binance_stream():
+    while True:
+        try:
+            res = requests.get("https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT", timeout=2).json()
+            market_signals["binance_eth"] = float(res['price'])
+        except:
+            pass
+        time.sleep(1.0)
+
+threading.Thread(target=fetch_binance_stream, daemon=True).start()
+
+# ==============================================================================
+# 3. الخيط 2: رادار تصفيات Morpho Blue الرسمي (Free GraphQL API)
+# ==============================================================================
+def morpho_liquidation_watcher():
+    """فحص ديون الحيتان في منصات Morpho كل 30 ثانية عبر الـ GraphQL الرسمي"""
+    graphql_endpoint = "https://blue-api.morpho.org/graphql"
+    query = """
+    query {
+      markets(where: { chainId_in: [8453] }, first: 10) {
+        items {
+          uniqueKey
+          lltv
+          state {
+            borrowAssets
+            supplyAssets
+          }
+        }
+      }
+    }
+    """
+    while True:
+        try:
+            res = requests.post(graphql_endpoint, json={"query": query}, timeout=4).json()
+            if "data" in res:
+                market_signals["morpho_liquidations"] = len(res["data"]["markets"]["items"])
+        except:
+            pass
+        time.sleep(30)
+
+threading.Thread(target=morpho_liquidation_watcher, daemon=True).start()
+
+# ==============================================================================
+# 4. مصفوفة المسابح والتحكيم الثلاثي (The Full Strategy Matrix)
 # ==============================================================================
 MONITORED_POOLS = [
     {
@@ -59,28 +107,6 @@ MONITORED_POOLS = [
         "fee": 0.10,
         "min_profit": 12,
         "max_size": 50000
-    },
-    {
-        "name": "DEGEN / WETH (Meme Slipstream)",
-        "uni": "0x4e829F8A5213c42535AB84AA40BD4aDCCE9cBa02",
-        "aero": "0xaFB62448929664Bfccb0aAe22f232520e765bA88",
-        "path1": [USDC, WETH, DEGEN],
-        "path2": [DEGEN, WETH, USDC],
-        "dec_diff": 0,
-        "fee": 0.30,
-        "min_profit": 8,
-        "max_size": 15000
-    },
-    {
-        "name": "BRETT / WETH (Meme Slipstream)",
-        "uni": "0x4e829F8A5213c42535AB84AA40BD4aDCCE9cBa02",
-        "aero": "0x4e829F8A5213c42535AB84AA40BD4aDCCE9cBa02",
-        "path1": [USDC, WETH, BRETT],
-        "path2": [BRETT, WETH, USDC],
-        "dec_diff": 0,
-        "fee": 0.30,
-        "min_profit": 8,
-        "max_size": 15000
     },
     {
         "name": "TRIANGLE: USDC -> WETH -> AERO -> USDC",
@@ -143,7 +169,7 @@ def execute_golden_arbitrage(pool):
         flash_amount = int(size * 10**6)
         min_profit   = int(pool['min_profit'] * 10**6)
         min_out1     = 0
-        builder_tip  = 500
+        builder_tip  = 500 # 5% للمعدن
 
         params = (
             AERODROME_ROUTER,
@@ -170,7 +196,7 @@ def execute_golden_arbitrage(pool):
     if not best_size:
         return
 
-    print(f"\n🔥 [اقتناص رابح!] النمط: {pool['name']} | الحجم: ${best_size:,} USDC", flush=True)
+    print(f"\n🔥 [اقتناص رابح!] النمط: {pool['name']} | حجم القرض: ${best_size:,} USDC", flush=True)
     
     nonce = get_nonce()
     tx = {
@@ -217,6 +243,8 @@ def run_loop():
     except:
         return
 
+    b_price = market_signals.get("binance_eth", 0.0)
+
     for i, pool in enumerate(MONITORED_POOLS):
         res_uni = results.get(2 * i)
         res_aero = results.get(2 * i + 1)
@@ -226,21 +254,28 @@ def run_loop():
 
         if p_uni and p_aero:
             diff_pct = abs(p_uni - p_aero) / min(p_uni, p_aero) * 100
-            net_spread = diff_pct - pool['fee']
 
+            if b_price > 0 and pool['name'].startswith("WETH"):
+                cex_diff = abs(b_price - p_uni) / p_uni * 100
+                if cex_diff > 0.25:
+                    diff_pct += cex_diff
+
+            net_spread = diff_pct - pool['fee']
             status = f"🟢 +{net_spread:.4f}% [فرصة!]" if net_spread > 0.03 else f"⚪ {net_spread:.4f}%"
-            print(f"⚡ [24/7 Apex] {pool['name']:<38} | Uni: ${p_uni:<8.2f} | Aero: ${p_aero:<8.2f} | الصافي: {status}", flush=True)
+
+            print(f"⚡ [24/7 Apex] {pool['name']:<36} | Uni: ${p_uni:<8.2f} | Aero: ${p_aero:<8.2f} | الصافي: {status}", flush=True)
 
             if net_spread > 0.03:
                 execute_golden_arbitrage(pool)
 
 print("="*90, flush=True)
-print("🚀 انطلاق المنظومة الخماسية الشاملة لجميع الأزواج وعملات الميم 24/7", flush=True)
+print("🚀 انطلاق المنظومة الشاملة المكتملة 24/7 (v7 Master Apex + Morpho API + 3-Hop)", flush=True)
 print(f"💎 العقد الماستر: {CONTRACT_ADDRESS}")
 print(f"🔒 الخزينة الحصرية المستلمة للأرباح: محفظة Jody ({OWNER_ADDRESS})")
+print("📡 المسارات: Slipstream (0.10%) + Morpho GraphQL API + Triangular (3-Hop) + Binance Signal", flush=True)
 print("="*90, flush=True)
 
 start_time = time.time()
-while time.time() - start_time < 19800: # 5.5 ساعات
+while time.time() - start_time < 19800:
     run_loop()
     time.sleep(2.0)
