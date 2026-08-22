@@ -23,7 +23,6 @@ WETH   = "0x4200000000000000000000000000000000000006"
 cbETH  = "0x2Ae3F1Ec7F1F5012CFEab0185bfc7aa3cf0DEc22"
 wstETH = "0xc1CBa3fCea344f92D9239c08C0568f6F2F0ee452"
 AERO   = "0x940181a94A35A4569E4529A3CDfB74e38FD98631"
-DEGEN  = "0x4ed4E862860beD51a9570b96d89aF5E1B0Efefed"
 
 PRIVATE_KEY = os.environ.get("PRIVATE_KEY")
 if not PRIVATE_KEY:
@@ -35,11 +34,11 @@ OWNER_ADDRESS = account.address
 session = requests.Session()
 
 # ==============================================================================
-# 2. مصفوفة المسابح والتحكيم الشاملة
+# 2. مصفوفة المسابح والتحكيم الشاملة المحصنة
 # ==============================================================================
 MONITORED_POOLS = [
     {
-        "name": "WETH / USDC (Slipstream)",
+        "name": "WETH / USDC (Slipstream 0.10%)",
         "uni": "0xd0b53D9277642d899DF5C87A3966A349A798F224",
         "uni_type": "slot0",
         "aero": "0xb2cc224c1c9fee385f8ad6a55b4d94e92359dc59",
@@ -52,7 +51,7 @@ MONITORED_POOLS = [
         "max_size": 50000
     },
     {
-        "name": "cbETH / WETH (LST)",
+        "name": "cbETH / WETH (Slipstream LST)",
         "uni": "0x10648ba41b8565907cfa1496765fa4d95390aa0d",
         "uni_type": "slot0",
         "aero": "0x47ca96ea59c13f72745928887f84c9f52c3d7348",
@@ -63,18 +62,6 @@ MONITORED_POOLS = [
         "fee": 0.10,
         "min_profit": 12,
         "max_size": 50000
-    },
-    {
-        "name": "AERO / USDC (Ecosystem)",
-        "uni": "0xd0b53D9277642d899DF5C87A3966A349A798F224",
-        "uni_type": "slot0",
-        "aero": "0xb2cc224c1c9fee385f8ad6a55b4d94e92359dc59",
-        "path1": [USDC, AERO],
-        "path2": [AERO, USDC],
-        "dec_diff": 12,
-        "fee": 0.30,
-        "min_profit": 8,
-        "max_size": 25000
     },
     {
         "name": "TRIANGLE: USDC -> WETH -> AERO -> USDC",
@@ -145,7 +132,7 @@ def execute_golden_arbitrage(pool):
 
     for size in flash_tiers:
         flash_amount = int(size * 10**6)
-        min_profit   = int(pool['min_profit'] * 10**6)
+        min_profit   = int(pool.get('min_profit', 10) * 10**6)
         min_out1     = 0
         builder_tip  = 500 # 5% للمعدن
 
@@ -174,7 +161,7 @@ def execute_golden_arbitrage(pool):
     if not best_size:
         return
 
-    print(f"\n🔥 [اقتناص رابح!] النمط: {pool['name']} | حجم القرض: ${best_size:,} USDC", flush=True)
+    print(f"\n🔥 [اقتناص رابح!] النمط: {pool['name']} | الحجم: ${best_size:,} USDC", flush=True)
     
     nonce = get_nonce()
     tx = {
@@ -210,8 +197,10 @@ def execute_golden_arbitrage(pool):
 def run_loop():
     calls = []
     for pool in MONITORED_POOLS:
-        calls.append({"to": pool['uni'], "data": "0x3850c7bd" if pool['uni_type'] == "slot0" else "0x0902f1ac"})
-        calls.append({"to": pool['aero'], "data": "0x3850c7bd" if pool['aero_type'] == "slot0" else "0x0902f1ac"})
+        uni_type = pool.get('uni_type', 'slot0')
+        aero_type = pool.get('aero_type', 'slot0')
+        calls.append({"to": pool['uni'], "data": "0x3850c7bd" if uni_type == "slot0" else "0x0902f1ac"})
+        calls.append({"to": pool['aero'], "data": "0x3850c7bd" if aero_type == "slot0" else "0x0902f1ac"})
 
     payload = [{"jsonrpc": "2.0", "method": "eth_call", "params": [{"to": c['to'], "data": c['data']}, "latest"], "id": i} for i, c in enumerate(calls)]
 
@@ -225,12 +214,17 @@ def run_loop():
         res_uni = results.get(2 * i)
         res_aero = results.get(2 * i + 1)
 
-        p_uni = decode_price(res_uni, pool['uni_type'], pool['dec_diff'])
-        p_aero = decode_price(res_aero, pool['aero_type'], pool['dec_diff'])
+        uni_type = pool.get('uni_type', 'slot0')
+        aero_type = pool.get('aero_type', 'slot0')
+        dec_diff = pool.get('dec_diff', 0)
+        fee = pool.get('fee', 0.10)
+
+        p_uni = decode_price(res_uni, uni_type, dec_diff)
+        p_aero = decode_price(res_aero, aero_type, dec_diff)
 
         if p_uni and p_aero:
             diff_pct = abs(p_uni - p_aero) / min(p_uni, p_aero) * 100
-            net_spread = diff_pct - pool['fee']
+            net_spread = diff_pct - fee
 
             status = f"🟢 +{net_spread:.4f}% [فرصة!]" if net_spread > 0.03 else f"⚪ {net_spread:.4f}%"
             print(f"⚡ [24/7 Apex] {pool['name']:<38} | Uni: ${p_uni:<8.2f} | Aero: ${p_aero:<8.2f} | الصافي: {status}", flush=True)
@@ -239,12 +233,12 @@ def run_loop():
                 execute_golden_arbitrage(pool)
 
 print("="*90, flush=True)
-print("🚀 انطلاق المنظومة الماستر الشاملة المكتملة 24/7 (v8 Master Engine)", flush=True)
+print("🚀 انطلاق المنظومة الماستر المحصنة 24/7 (v8.1 Master Shield Engine)", flush=True)
 print(f"💎 العقد الماستر: {CONTRACT_ADDRESS}")
 print(f"🔒 الخزينة الحصرية المستلمة للأرباح: محفظة Jody ({OWNER_ADDRESS})")
 print("="*90, flush=True)
 
 start_time = time.time()
-while time.time() - start_time < 19800: # 5.5 ساعات لكل جلسة
+while time.time() - start_time < 19800: # 5.5 ساعات
     run_loop()
     time.sleep(2.0)
